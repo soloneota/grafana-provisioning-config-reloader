@@ -1,0 +1,26 @@
+{
+  "name": "grafana-provisioning-config-reloader",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "ncc build src/grafana-provisioning-config-reloader.js -o dist",
+    "start": "node src/grafana-provisioning-config-reloader.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "consola": "^3.2.3",
+    "debounce": "^2.1.0",
+    "picomatch": "^4.0.2",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.1"
+  },
+  "packageManager": "pnpm@9.4.0"
+}
