@@ -40,9 +40,13 @@ function request(path, opts = {}) {
         headers.set('Content-Type', 'application/json')
     }
     if (!headers.has('Authorization')) {
-        headers.set('Authorization', `Basic ${btoa(`${GF_SECURITY_ADMIN_USER}:${GF_SECURITY_ADMIN_PASSWORD}`)}`)
+        headers.set('Authorization', `Basic ${generateBasicAuthToken(GF_SECURITY_ADMIN_USER, GF_SECURITY_ADMIN_PASSWORD)}`)
     }
     return fetch(`${GF_SERVER_ROOT_URL}/api/${path}`, { headers, ...opts })
+}
+
+function generateBasicAuthToken(username, password) {
+    return btoa(`${username}:${password}`)
 }
 
 /**
@@ -157,8 +161,10 @@ async function main() {
         .then((serviceAccountToken) => {
             // Create a base64 encoded token
             console.log(`[main] Generate basic auth token for user "${serviceAccountToken.login}"`)
-            const token = Buffer.from(`${serviceAccountToken.login}:${serviceAccountToken.password}`).toString('base64')
+            const token = generateBasicAuthToken(serviceAccountToken.login, serviceAccountToken.password)
             const Authorization = `Basic ${token}`
+
+            console.debug('Authorization', Authorization)
 
             // Create a debounced function to reload the Grafana configuration
             const reload = debounce(function (event, path) {
