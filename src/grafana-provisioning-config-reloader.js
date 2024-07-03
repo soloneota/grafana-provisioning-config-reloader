@@ -16,15 +16,16 @@ const GF_SECURITY_ADMIN_PASSWORD = process.env['GF_SECURITY_ADMIN_USER'] || 'gra
 const GF_PATHS_PROVISIONING = process.env['GF_PATHS_PROVISIONING'] || '/etc/grafana/provisioning'
 
 // gf-provisioning-config-reloader
-const GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID'] || uuidv5(os.hostname(), uuidv5.DNS)
+let GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID']
+const GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE'] || '/data/node-id'
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR'] || '/data'
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE = `${GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR}/serviceaccount.json`
 
-const defaultServiceAccountObject = {
+const defaultServiceAccountObject = () => ({
     "email": `${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}@gf-provisioning-config-reloader`,
     "login": `gf-provisioning-config-reloader-${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}`,
     "password": GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID,
-}
+})
 
 /**
  * Send a request to the Grafana API
@@ -48,12 +49,14 @@ function request(path, opts = {}) {
  * Send a POST request to the Grafana API
  * @param {string} path 
  * @param {Record<any, any>} data 
+ * @param {RequestInit} opts
  * @returns 
  */
-function write(path, data) {
+function write(path, data, opts = {}) {
     return request(path, {
         method: 'POST',
         body: JSON.stringify(data),
+        ...opts,
     })
 }
 
@@ -61,13 +64,49 @@ function write(path, data) {
  * Send a PUT request to the Grafana API
  * @param {string} path 
  * @param {Record<any, any>} data 
+ * * @param {RequestInit} opts
  * @returns 
  */
-function update(path, data) {
+function update(path, data, opts = {}) {
     return request(path, {
         method: 'PUT',
         body: JSON.stringify(data),
+        ...opts,
     })
+}
+
+// Wait for Grafana to be ready
+function waitforgrafana() {
+    return pRetry(async () => {
+        const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
+        if (response.status !== 200) {
+            throw new AbortError(`Grafana health check failed with status: ${response.status}`)
+        }
+    }, { forever: true })
+}
+
+function sleep(ms = 0) {
+    return new Promise(resolve => setTimeout(resolve, ms * 1000))
+}
+
+function generateNodeId() {
+    // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID is set
+    if (GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID !== undefined) {
+        return
+    }
+
+    // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE exists
+    if (fs.existsSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE)) {
+        return fs.readFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE, 'utf8')
+    }
+
+    // Generate a random node id
+    console.log("[main] Generate a random node id")
+    const nodeId = uuidv5(os.hostname(), uuidv5.DNS)
+    fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE, nodeId)
+
+    // Set the GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID environment variable
+    GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID = nodeId
 }
 
 // Create a task that resolves immediately
@@ -78,22 +117,9 @@ const task = Promise.resolve()
 const provisioningDashboardsMatcher = picomatch('**/dashboards/*')
 const provisioningDatasourcesMatcher = picomatch('**/datasources/*')
 
-// Wait for Grafana to be ready
-function waitforgrafana() {
-    return pRetry(async () => {
-        const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
-        if (response.status !== 200) {
-            throw new AbortError(`Grafana health check failed with status: ${response.status}`)
-        }
-    }, { forever: true})
-}
-
-function sleep(ms = 0) {
-    return new Promise(resolve => setTimeout(resolve, ms * 1000))
-}
-
 async function main() {
     task
+        .then(() => generateNodeId())
         .then(() => sleep(5))
         .then(() => waitforgrafana())
         .then(async () => {
@@ -107,7 +133,7 @@ async function main() {
 
             // Create a new service account
             console.log('[main] Create a new service account')
-            const response = await write('admin/users', defaultServiceAccountObject)
+            const response = await write('admin/users', defaultServiceAccountObject())
 
             // Parse the response JSON
             const json = await response.json()
@@ -119,7 +145,7 @@ async function main() {
 
             // Write the service account to the file
             console.log('[main] Write the service account to the file')
-            fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE, JSON.stringify(defaultServiceAccountObject, null, 2))
+            fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE, JSON.stringify(defaultServiceAccountObject(), null, 2))
 
             // Update account permissions
             console.log('[main] Update account permissions')
@@ -129,10 +155,15 @@ async function main() {
             return json
         }) // Create service accounts
         .then((serviceAccountToken) => {
+            // Create a base64 encoded token
+            console.log(`[main] Generate basic auth token for user "${serviceAccountToken.login}"`)
+            const token = Buffer.from(`${serviceAccountToken.login}:${serviceAccountToken.password}`).toString('base64')
+            const Authorization = `Basic ${token}`
+
             // Create a debounced function to reload the Grafana configuration
             const reload = debounce(function (event, path) {
                 if (provisioningDashboardsMatcher(path)) {
-                    write('admin/provisioning/dashboards/reload')
+                    write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                         .then(res => res.json())
                         .then(res => {
                             console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
@@ -140,7 +171,7 @@ async function main() {
                         .catch(console.warn)
                 }
                 if (provisioningDatasourcesMatcher(path)) {
-                    write('admin/provisioning/datasources/reload')
+                    write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
                         .then(res => res.json())
                         .then(res => {
                             console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
