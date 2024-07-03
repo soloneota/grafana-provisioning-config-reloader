@@ -137,7 +137,8 @@ async function main() {
 
             // Create a new service account
             console.log('[main] Create a new service account')
-            const response = await write('admin/users', defaultServiceAccountObject())
+            const serviceAccount = defaultServiceAccountObject()
+            const response = await write('admin/users', serviceAccount)
 
             // Parse the response JSON
             const json = await response.json()
@@ -149,22 +150,20 @@ async function main() {
 
             // Write the service account to the file
             console.log('[main] Write the service account to the file')
-            fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE, JSON.stringify(defaultServiceAccountObject(), null, 2))
+            fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE, JSON.stringify(serviceAccount, null, 2))
 
             // Update account permissions
             console.log('[main] Update account permissions')
             const userId = json.id
             await update(`admin/users/${userId}/permissions`, { "isGrafanaAdmin": true, })
 
-            return json
+            return serviceAccount
         }) // Create service accounts
-        .then((serviceAccountToken) => {
+        .then((serviceAccount) => {
             // Create a base64 encoded token
-            console.log(`[main] Generate basic auth token for user "${serviceAccountToken.login}"`)
-            const token = generateBasicAuthToken(serviceAccountToken.login, serviceAccountToken.password)
+            console.log(`[main] Generate basic auth token for user "${serviceAccount.login}"`)
+            const token = generateBasicAuthToken(serviceAccount.login, serviceAccount.password)
             const Authorization = `Basic ${token}`
-
-            console.debug('Authorization', Authorization)
 
             // Create a debounced function to reload the Grafana configuration
             const reload = debounce(function (event, path) {
