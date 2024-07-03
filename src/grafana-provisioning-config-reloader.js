@@ -166,28 +166,33 @@ async function main() {
             const Authorization = `Basic ${token}`
 
             // Create a debounced function to reload the Grafana configuration
-            const reload = debounce(function (event, path) {
-                if (provisioningDashboardsMatcher(path)) {
-                    write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
-                        .then(res => res.json())
-                        .then(res => {
-                            console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
-                        })
-                        .catch(console.warn)
-                }
-                if (provisioningDatasourcesMatcher(path)) {
-                    write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
-                        .then(res => res.json())
-                        .then(res => {
-                            console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
-                        })
-                        .catch(console.warn)
-                }
-            }, 500, { immediate: true})
+            const reloadDashboards = debounce(function (event, path) {
+                write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
+                    .then(res => res.json())
+                    .then(res => {
+                        console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
+                    })
+                    .catch(console.warn)
+            }, 2000)
+            const reloadDatasources = debounce(function (event, path) {
+                write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
+                    .then(res => res.json())
+                    .then(res => {
+                        console.log(`[main] msg="${res.message}" event="${event}" path="${path}"`)
+                    })
+                    .catch(console.warn)
+            }, 2000)
+
+            // Trigger a reload of the provisioning configuration
+            reloadDashboards('fake', '/fake/dashboards/reload')
+            reloadDatasources('fake', '/fake/datasources/reload')
 
             // Monitor provisioning directory for changes to dashboards and datasources, then reload the provisioned configuration via the Grafana API
             console.log(`[main] Start watching provisioning directory "${GF_PATHS_PROVISIONING}"`)
-            chokidar.watch(GF_PATHS_PROVISIONING).on('all', async (event, path) => reload(event, path))
+            chokidar.watch(GF_PATHS_PROVISIONING).on('all', (event, path) => {
+                if (provisioningDashboardsMatcher(path)) { reloadDashboards (event, path)}
+                if (provisioningDatasourcesMatcher(path)) { reloadDatasources(event, path) }
+            })
         })
         .catch((err) => {
             console.error(err)
