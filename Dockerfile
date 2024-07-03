@@ -11,3 +11,4 @@ FROM node:22-alpine
 COPY --from=builder /dist/index.js /bin/grafana-provisioning-config-reloader
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 ENTRYPOINT [ "/docker-entrypoint.sh" ]
+VOLUME [ "/data" ]

@@ -3,6 +3,7 @@ import os from 'node:os'
 import chokidar from 'chokidar'
 import debounce from 'debounce'
 import picomatch from 'picomatch'
+import pRetry, { AbortError } from 'p-retry';
 import { v5 as uuidv5 } from 'uuid'
 
 // Grafana environment variables
@@ -74,11 +75,27 @@ function update(path, data) {
 const task = Promise.resolve()
 
 // Create a matcher for dashboards and datasources
-const provisioningDashboardsMatcher = picomatch('**/dashboards/*.yml')
-const provisioningDatasourcesMatcher = picomatch('**/datasources/*.yml')
+const provisioningDashboardsMatcher = picomatch('**/dashboards/*')
+const provisioningDatasourcesMatcher = picomatch('**/datasources/*')
+
+// Wait for Grafana to be ready
+function waitforgrafana() {
+    return pRetry(async () => {
+        const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
+        if (response.status !== 200) {
+            throw new AbortError(`Grafana health check failed with status: ${response.status}`)
+        }
+    }, { forever: true})
+}
+
+function sleep(ms = 0) {
+    return new Promise(resolve => setTimeout(resolve, ms * 1000))
+}
 
 async function main() {
     task
+        .then(() => sleep(5))
+        .then(() => waitforgrafana())
         .then(async () => {
             // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE exists
             if (fs.existsSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE)) {
