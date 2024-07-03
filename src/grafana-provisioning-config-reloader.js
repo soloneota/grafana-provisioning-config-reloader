@@ -4,7 +4,7 @@ import chokidar from 'chokidar'
 import debounce from 'debounce'
 import picomatch from 'picomatch'
 import pRetry, { AbortError } from 'p-retry';
-import { v5 as uuidv5 } from 'uuid'
+import { v5 as uuidv5, v4 as uuidv4 } from 'uuid'
 
 // Grafana environment variables
 const GF_SERVER_DOMAIN = process.env['GF_SERVER_DOMAIN'] || 'localhost'
@@ -24,7 +24,7 @@ const GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE = `${GRAFANA_PRO
 const defaultServiceAccountObject = () => ({
     "email": `${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}@gf-provisioning-config-reloader`,
     "login": `gf-provisioning-config-reloader-${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}`,
-    "password": GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID,
+    "password": uuidv4(),
 })
 
 /**
