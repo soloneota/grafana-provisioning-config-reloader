@@ -135,7 +135,7 @@ async function main() {
 
     // Create a immediately resolved promise, then chain the promise
     Promise.resolve()
-        .then(() => sleep(5))
+        .then(() => sleep(15))
         .then(() => waitforgrafana())
         .then(async () => {
             // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE exists
