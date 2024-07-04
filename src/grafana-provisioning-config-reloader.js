@@ -98,19 +98,21 @@ function update(path, data, opts = {}) {
     })
 }
 
+function sleep(ms = 0) {
+    return new Promise(resolve => setTimeout(resolve, ms * 1000))
+}
+
 // Wait for Grafana to be ready
 function waitforgrafana() {
     logger.info('Waiting for Grafana to be ready...')
     return pRetry(async () => {
         const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
-        if (response.status !== 200) {
-            throw new AbortError(`Grafana health check failed with status: ${response.status}`)
+        const json = await response.json()
+        if (json.database !== "ok") {
+            throw new AbortError(`Grafana health check failed with database status: ${json.database}`)
         }
+        if (response.status !== 200) { await sleep(5) }
     }, { forever: true })
-}
-
-function sleep(ms = 0) {
-    return new Promise(resolve => setTimeout(resolve, ms * 1000))
 }
 
 // Create a matcher for dashboards and datasources
