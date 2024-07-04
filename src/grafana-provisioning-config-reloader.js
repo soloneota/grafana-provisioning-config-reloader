@@ -5,11 +5,8 @@ import chokidar from 'chokidar'
 import debounce from 'debounce'
 import picomatch from 'picomatch'
 import pRetry, { AbortError } from 'p-retry';
-import { v5 as uuidv5, v4 as uuidv4 } from 'uuid'
+import { v4 as uuidv4 } from 'uuid'
 import pinoPretty from 'pino-pretty'
-
-// Structured logging
-const logger = pino(pinoPretty({ colorize: false }))
 
 // Grafana environment variables
 const GF_SERVER_DOMAIN = process.env['GF_SERVER_DOMAIN'] || 'localhost'
@@ -21,16 +18,21 @@ const GF_SECURITY_ADMIN_PASSWORD = process.env['GF_SECURITY_ADMIN_USER'] || 'gra
 const GF_PATHS_PROVISIONING = process.env['GF_PATHS_PROVISIONING'] || '/etc/grafana/provisioning'
 
 // gf-provisioning-config-reloader
-let GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID']
+/**
+ * Possible values: "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent"
+ */
+const GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL'] || 'info'
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR'] || '/data'
-const GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE'] || `${GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR}/node-id`
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE = `${GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR}/serviceaccount.json`
 
-const defaultServiceAccountObject = () => ({
-    "email": `${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}@gf-provisioning-config-reloader`,
-    "login": `gf-provisioning-config-reloader-${GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID}`,
-    "password": uuidv4(),
-})
+const defaultServiceAccountObject = () => {
+    const [id, password] = [uuidv4(), uuidv4()]
+    return {
+        "email": `${id}@gf-provisioning-config-reloader`,
+        "login": `gf-provisioning-config-reloader-${id}`,
+        "password": password,
+    }
+}
 
 /**
  * Send a request to the Grafana API
@@ -66,6 +68,12 @@ function write(path, data, opts = {}) {
         method: 'POST',
         body: JSON.stringify(data),
         ...opts,
+    }).then(async res => {
+        const json = await res.json()
+        if (res.status !== 200) {
+            throw new Error(`(${res.statusText}) ${json.message}`)
+        }
+        return json
     })
 }
 
@@ -81,6 +89,12 @@ function update(path, data, opts = {}) {
         method: 'PUT',
         body: JSON.stringify(data),
         ...opts,
+    }).then(async res => {
+        const json = await res.json()
+        if (res.status !== 200) {
+            throw new Error(`(${res.statusText}) ${json.message}`)
+        }
+        return json
     })
 }
 
@@ -98,37 +112,19 @@ function sleep(ms = 0) {
     return new Promise(resolve => setTimeout(resolve, ms * 1000))
 }
 
-function generateNodeId() {
-    // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID is set
-    if (GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID !== undefined) {
-        return
-    }
-
-    // Check if GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE exists
-    if (fs.existsSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE)) {
-        return fs.readFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE, 'utf8')
-    }
-
-    // Generate a random node id
-    logger.info("Generate a random node id")
-    const nodeId = uuidv5(os.hostname(), uuidv5.DNS)
-    fs.writeFileSync(GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID_FILE, nodeId)
-
-    // Set the GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID environment variable
-    GRAFANA_PROVISIONING_CONFIG_RELOADER_NODE_ID = nodeId
-}
-
-// Create a task that resolves immediately
-// This is used for chaining async functions
-const task = Promise.resolve()
-
 // Create a matcher for dashboards and datasources
 const provisioningDashboardsMatcher = picomatch('**/dashboards/*')
 const provisioningDatasourcesMatcher = picomatch('**/datasources/*')
 
+// Structured logging
+const logger = pino({
+    level: GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL,
+    timestamp: pino.stdTimeFunctions.isoTime,
+}, pinoPretty({ colorize: false, singleLine: true }))
+
 async function main() {
-    task
-        .then(() => generateNodeId())
+    // Create a immediately resolved promise, then chain the promise
+    Promise.resolve()
         .then(() => sleep(5))
         .then(() => waitforgrafana())
         .then(async () => {
@@ -143,14 +139,14 @@ async function main() {
             // Create a new service account
             logger.info('Create a new service account')
             const serviceAccount = defaultServiceAccountObject()
-            const response = await write('admin/users', serviceAccount)
+            const response = await request('admin/users', { method: 'POST', body: JSON.stringify(serviceAccount)})
 
             // Parse the response JSON
             const json = await response.json()
 
             // Check if the response status is not 200
             if (response.status !== 200) {
-                throw new Error(`msg="${json.message}" status="${response.status}"`)
+                throw new Error(json.message)
             }
 
             // Write the service account to the file
@@ -173,15 +169,13 @@ async function main() {
             // Create a debounced function to reload the Grafana configuration
             const reloadDashboards = debounce(function (event, path) {
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
-                    .then(res => res.json())
                     .then(res => logger.info(res.message))
-                    .catch(logger.warn)
+                    .catch(err => logger.warn(err))
             }, 2000)
             const reloadDatasources = debounce(function (event, path) {
                 write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
-                    .then(res => res.json())
                     .then(res => logger.info(res.message))
-                    .catch(logger.warn)
+                    .catch(err => logger.warn(err))
             }, 2000)
 
             // Trigger a reload of the provisioning configuration
@@ -189,10 +183,12 @@ async function main() {
             reloadDashboards('fake', '/fake/dashboards/reload')
             reloadDatasources('fake', '/fake/datasources/reload')
 
-            // Monitor provisioning directory for changes to dashboards and datasources, then reload the provisioned configuration via the Grafana API
-            logger.info(`Start watching provisioning directory "${GF_PATHS_PROVISIONING}"`)
+            // Monitor provisioning directory for changes to dashboards and datasources,
+            // then reload the provisioned configuration via the Grafana API
+            logger.info(`Start watching provisioning directory "${GF_PATHS_PROVISIONING}"...`)
             chokidar.watch(GF_PATHS_PROVISIONING).on('all', (event, path) => {
-                if (provisioningDashboardsMatcher(path)) { reloadDashboards (event, path)}
+                logger.debug({ event, path }, "Event triggered")
+                if (provisioningDashboardsMatcher(path))  { reloadDashboards(event, path)  }
                 if (provisioningDatasourcesMatcher(path)) { reloadDatasources(event, path) }
             })
         })

@@ -1,0 +1,8 @@
+#!/bin/bash
+export GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL=debug
+export GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR=fake
+export GF_PATHS_PROVISIONING=${GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR}/provisioning
+
+mkdir -p ${GF_PATHS_PROVISIONING}
+
+node ../src/grafana-provisioning-config-reloader.js
