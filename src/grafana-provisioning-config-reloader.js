@@ -174,21 +174,18 @@ async function main() {
             const reloadDashboards = debounce(function (event, path) {
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => res.json())
-                    .then(res => {
-                        logger.info({ event, path }, res.message)
-                    })
+                    .then(res => logger.info(res.message))
                     .catch(logger.warn)
             }, 2000)
             const reloadDatasources = debounce(function (event, path) {
                 write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => res.json())
-                    .then(res => {
-                        logger.info({ event, path }, res.message)
-                    })
+                    .then(res => logger.info(res.message))
                     .catch(logger.warn)
             }, 2000)
 
             // Trigger a reload of the provisioning configuration
+            logger.info("Trigger a reload of the provisioning configuration")
             reloadDashboards('fake', '/fake/dashboards/reload')
             reloadDatasources('fake', '/fake/datasources/reload')
 
