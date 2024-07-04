@@ -112,7 +112,12 @@ function waitforgrafana() {
             throw new AbortError(`Grafana health check failed with database status: ${json.database}`)
         }
         if (response.status !== 200) { await sleep(5) }
-    }, { forever: true })
+    }, {
+        retries: 5,
+        onFailedAttempt: error => {
+            logger.info(`Grafana health check attempt ${error.attemptNumber} failed. There are ${error.retriesLeft} retries left.`);
+        },
+    })
 }
 
 // Create a matcher for dashboards and datasources
