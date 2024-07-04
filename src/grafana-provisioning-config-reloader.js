@@ -100,6 +100,7 @@ function update(path, data, opts = {}) {
 
 // Wait for Grafana to be ready
 function waitforgrafana() {
+    logger.info('Waiting for Grafana to be ready...')
     return pRetry(async () => {
         const response = await fetch(`${GF_SERVER_ROOT_URL}/api/health`)
         if (response.status !== 200) {
@@ -123,6 +124,8 @@ const logger = pino({
 }, pinoPretty({ colorize: false, singleLine: true }))
 
 async function main() {
+    logger.info('Starting Grafana provisioning config reloader...')
+
     // Create a immediately resolved promise, then chain the promise
     Promise.resolve()
         .then(() => sleep(5))
