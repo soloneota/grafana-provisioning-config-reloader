@@ -6,14 +6,10 @@ import debounce from 'debounce'
 import picomatch from 'picomatch'
 import pRetry, { AbortError } from 'p-retry';
 import { v5 as uuidv5, v4 as uuidv4 } from 'uuid'
+import pinoPretty from 'pino-pretty'
 
 // Structured logging
-const logger = pino({
-    transport: {
-        target: 'pino-pretty',
-        options: { colorize: false }
-    }
-})
+const logger = pino(pinoPretty({ colorize: false }))
 
 // Grafana environment variables
 const GF_SERVER_DOMAIN = process.env['GF_SERVER_DOMAIN'] || 'localhost'
