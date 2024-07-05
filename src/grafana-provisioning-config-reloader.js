@@ -181,12 +181,12 @@ async function main() {
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
-            }, 5000)
+            }, 2000)
             const reloadDatasources = debounce(function (event, path) {
                 write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
-            }, 2000, { immediate: true })
+            }, 2000)
 
             // Trigger a reload of the provisioning configuration
             logger.info("Trigger a reload of the provisioning configuration")
