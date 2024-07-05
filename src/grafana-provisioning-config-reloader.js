@@ -181,7 +181,7 @@ async function main() {
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
-            }, 2000, { immediate: true })
+            }, 5000)
             const reloadDatasources = debounce(function (event, path) {
                 write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
