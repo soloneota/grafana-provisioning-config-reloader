@@ -17,3 +17,11 @@ The provisioning configurations are stored at `/etc/grafana/provisioning` with t
 - `datasources`: You can manage data sources in Grafana by adding YAML configuration files in the `datasources` directory.
   
 See https://grafana.com/docs/grafana/latest/administration/provisioning
+
+## Usage
+
+See https://github.com/swarmlibs/promstack/blob/main/grafana/docker-stack.yml for a real-world usage example.
+
+## License
+
+Licensed under [MIT](./LICENSE).
