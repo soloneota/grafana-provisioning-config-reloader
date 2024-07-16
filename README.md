@@ -16,7 +16,7 @@ The provisioning configurations are stored at `/etc/grafana/provisioning` with t
 - `dashboards`: You can manage dashboards in Grafana by adding one or more YAML config files in this directory.
 - `datasources`: You can manage data sources in Grafana by adding YAML configuration files in this directory.
   
-See https://grafana.com/docs/grafana/latest/administration/provisioning
+See https://grafana.com/docs/grafana/latest/administration/provisioning for more information.
 
 ## Usage
 
