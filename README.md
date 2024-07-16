@@ -9,4 +9,11 @@ Automatically monitor and reloads the Grafana provisioning config files
 
 ## How it works?
 
-TBD
+- During initial deployment of both Grafana and `grafana-provisioning-config-reloader`, the reloader will attempt to create a service account on Grafana using the default credentials and save it to a persistence storage
+- The agent will continuously monitor the provisioning directory for any changes and send request to Grafana Admin HTTP API to [reload the provisioning configurations](https://grafana.com/docs/grafana/latest/developers/http_api/admin/#reload-provisioning-configurations)
+
+The provisioning configurations are stored at `/etc/grafana/provisioning` with the following sub-directory:
+- `dashboards`: You can manage dashboards in Grafana by adding one or more YAML config files in the `dashboards` directory.
+- `datasources`: You can manage data sources in Grafana by adding YAML configuration files in the `datasources` directory.
+  
+See https://grafana.com/docs/grafana/latest/administration/provisioning
