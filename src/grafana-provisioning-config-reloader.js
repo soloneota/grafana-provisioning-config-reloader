@@ -121,6 +121,7 @@ function waitforgrafana() {
 }
 
 // Create a matcher for dashboards and datasources
+const provisioningAlertingMatcher = picomatch('**/alerting/*')
 const provisioningDashboardsMatcher = picomatch('**/dashboards/*')
 const provisioningDatasourcesMatcher = picomatch('**/datasources/*')
 
@@ -177,6 +178,11 @@ async function main() {
             const Authorization = `Basic ${token}`
 
             // Create a debounced function to reload the Grafana configuration
+            const reloadAlerting = debounce(function (event, path) {
+                write('admin/provisioning/alerting/reload', {}, { headers: [['Authorization', Authorization]] })
+                    .then(res => logger.info(res.message))
+                    .catch(err => logger.warn(err))
+            }, 2000)
             const reloadDashboards = debounce(function (event, path) {
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
@@ -190,6 +196,7 @@ async function main() {
 
             // Trigger a reload of the provisioning configuration
             logger.info("Trigger a reload of the provisioning configuration")
+            reloadAlerting('fake', '/fake/alerting/reload')
             reloadDashboards('fake', '/fake/dashboards/reload')
             reloadDatasources('fake', '/fake/datasources/reload')
 
@@ -198,6 +205,7 @@ async function main() {
             logger.info(`Start watching provisioning directory "${GF_PATHS_PROVISIONING}"...`)
             chokidar.watch(GF_PATHS_PROVISIONING).on('all', (event, path) => {
                 logger.debug({ event, path }, "Event triggered")
+                if (provisioningAlertingMatcher(path))    { reloadAlerting(event, path)  }
                 if (provisioningDashboardsMatcher(path))  { reloadDashboards(event, path)  }
                 if (provisioningDatasourcesMatcher(path)) { reloadDatasources(event, path) }
             })
