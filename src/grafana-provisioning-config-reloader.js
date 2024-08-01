@@ -25,6 +25,10 @@ const GRAFANA_PROVISIONING_CONFIG_RELOADER_LOG_LEVEL = process.env['GRAFANA_PROV
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR'] || '/data'
 const GRAFANA_PROVISIONING_CONFIG_RELOADER_SERVICE_ACCOUNT_FILE = `${GRAFANA_PROVISIONING_CONFIG_RELOADER_DATA_DIR}/serviceaccount.json`
 
+const GRAFANA_PROVISIONING_CONFIG_RELOADER_ALERTING_ENABLED = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_ALERTING_ENABLED'] || 'true'
+const GRAFANA_PROVISIONING_CONFIG_RELOADER_DASHBOARD_ENABLED = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_DASHBOARD_ENABLED'] || 'true'
+const GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED = process.env['GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED'] || 'true'
+
 const defaultServiceAccountObject = () => {
     const [id, password] = [uuidv4(), uuidv4()]
     return {
@@ -179,16 +183,19 @@ async function main() {
 
             // Create a debounced function to reload the Grafana configuration
             const reloadAlerting = debounce(function (event, path) {
+                if (GRAFANA_PROVISIONING_CONFIG_RELOADER_ALERTING_ENABLED !== 'true') { return }
                 write('admin/provisioning/alerting/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
             }, 2000)
             const reloadDashboards = debounce(function (event, path) {
+                if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DASHBOARD_ENABLED !== 'true') { return }
                 write('admin/provisioning/dashboards/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
             }, 2000)
             const reloadDatasources = debounce(function (event, path) {
+                if (GRAFANA_PROVISIONING_CONFIG_RELOADER_DATASOURCE_ENABLED !== 'true') { return }
                 write('admin/provisioning/datasources/reload', {}, { headers: [['Authorization', Authorization]] })
                     .then(res => logger.info(res.message))
                     .catch(err => logger.warn(err))
@@ -205,7 +212,7 @@ async function main() {
             logger.info(`Start watching provisioning directory "${GF_PATHS_PROVISIONING}"...`)
             chokidar.watch(GF_PATHS_PROVISIONING).on('all', (event, path) => {
                 logger.debug({ event, path }, "Event triggered")
-                if (provisioningAlertingMatcher(path))    { reloadAlerting(event, path)  }
+                if (provisioningAlertingMatcher(path))    { reloadAlerting(event, path)   }
                 if (provisioningDashboardsMatcher(path))  { reloadDashboards(event, path)  }
                 if (provisioningDatasourcesMatcher(path)) { reloadDatasources(event, path) }
             })
